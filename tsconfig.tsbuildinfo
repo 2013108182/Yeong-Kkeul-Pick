@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/data/apartments.ts","./src/data/policy-2026.ts","./src/data/regulated-zones.ts","./src/engine/calculator.ts","./src/pages/landing.tsx","./src/pages/result.tsx","./src/pages/wizard.tsx","./src/store/useappstore.ts","./src/utils/format.ts","./src/utils/shareurl.ts"],"version":"5.9.3"}
