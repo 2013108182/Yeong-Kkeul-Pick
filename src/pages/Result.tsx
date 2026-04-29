@@ -59,7 +59,7 @@ export const Result = () => {
         pixelRatio: 2,
       });
       const a = document.createElement('a');
-      a.download = `younggeul-${Date.now()}.png`;
+      a.download = `yeong-kkeul-pick-${Date.now()}.png`;
       a.href = dataUrl;
       a.click();
     } catch (e) { console.error(e); }
