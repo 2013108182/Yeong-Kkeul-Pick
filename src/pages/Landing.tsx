@@ -14,7 +14,7 @@ export const Landing = () => {
         transition={{ duration: 0.5 }}
       >
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, color: 'var(--accent-cyan)', marginBottom: 16 }}>
-          영끌계산기 2.0 · 2026
+        영끌픽 · 2026
         </div>
 
         <h1 className="h-display" style={{ marginBottom: 16 }}>
