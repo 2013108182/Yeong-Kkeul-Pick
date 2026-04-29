@@ -44,30 +44,6 @@ export const Landing = () => {
           ))}
         </div>
       </motion.div>
-
-      {/* 1.0과의 차이 — 펼침 카드 */}
-      <motion.div
-        className="glass fade-up"
-        style={{ marginTop: 24 }}
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.15 }}
-      >
-        <div className="h-3" style={{ marginBottom: 16 }}>1.0 영끌계산기와 뭐가 다른가요?</div>
-        <div className="grid-2">
-          <Diff before="결과 1개 (최대 주택가)" after="3 케이스 비교 (강남3구·용산 / 토허제 / 비토허제)" />
-          <Diff before="자치구 평균가 매칭" after="개별 아파트 큐레이션" />
-          <Diff before="DSR 40% 단순 적용" after="스트레스 DSR 3단계 + 6억 캡 반영" />
-          <Diff before="특례보금자리 (폐지된 정책)" after="신생아특례 + 보금자리론 (2026)" />
-        </div>
-      </motion.div>
     </div>
   );
 };
-
-const Diff = ({ before, after }: { before: string; after: string }) => (
-  <div className="glass-tile">
-    <div className="t-mute" style={{ textDecoration: 'line-through', marginBottom: 4 }}>{before}</div>
-    <div className="t-body" style={{ fontWeight: 600 }}>→ {after}</div>
-  </div>
-);
