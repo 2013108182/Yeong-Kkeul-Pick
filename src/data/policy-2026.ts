@@ -53,19 +53,21 @@ export const BOGEUMJARI_PRICE_CAP   = 6;    // 억
 export const NORMAL_RATE = 5.50; // %
 
 // ─── 스트레스 DSR 3단계 (2025.07~) ───
-export const STRESS_RATE_CAPITAL = 1.5;  // %p 가산 (수도권)
+export const STRESS_RATE_CAPITAL = 3.0;  // %p 가산 (수도권, 스트레스 DSR 3단계 2026.04~)
 export const STRESS_RATE_LOCAL   = 0.75; // %p 가산 (지방)
 export const DSR_LIMIT           = 0.40; // 40%
 
 // ─── LTV (%) ───
 export const LTV = {
-  FIRSTTIME_NON_REGULATED: 80,
-  FIRSTTIME_REGULATED:     70,
-  GENERAL:                 70,
+  GENERAL: 70, // 수도권 전역 생애최초 포함 최대 70% (2026.04~)
 };
 
-// ─── 수도권 주담대 한도 캡 ───
-export const CAPITAL_LOAN_CAP = 6; // 억
+// ─── 수도권 주담대 한도 캡 (주택 가격 기준, 억) ───
+export const getCapitalLoanCap = (priceEok: number): number => {
+  if (priceEok <= 15) return 6;
+  if (priceEok <= 25) return 4;
+  return 2;
+};
 
 // ─── 취득세율 (주택 가격 억 기준, 1주택) ───
 // 6억 이하: 1%, 6~9억: 1~3% 선형, 9억 초과: 3%
