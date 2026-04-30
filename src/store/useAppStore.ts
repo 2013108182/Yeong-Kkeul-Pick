@@ -4,35 +4,29 @@ import type { CategoryKey } from '../data/apartments';
 
 export type AppState = Inputs & {
   preferCategory: CategoryKey;
-  preferRegions: string[];     // region codes; [] = 전체
-};
-
-const todayMinus30 = () => {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 32);
-  return d.toISOString().slice(0, 10);
+  preferRegions: string[];
 };
 
 export const initialState: AppState = {
-  birthday: '',
-  isMarried: null as any,       // 기본 상태를 위해 null 지정
-  isNewCouple: null as any,
-  hasNewBorn2yr: null as any,
-  isDualIncome: null as any,
-  isFirstTime: null as any,
-  isNoHouse: null as any,
-  yearIncome: '' as any,        // 0 대신 비워두어 placeholder가 보이게 함
-  myAsset: '' as any,
-  monthlySaving: '' as any,
-  borrowingYear: 30,
-  paymentType: 'fixed',
-  kidsCount: 0,
-  isHavingKids: false,
+  birthday:       '',
+  isMarried:      false,
+  isNewCouple:    false,
+  hasNewBorn2yr:  false,
+  isDualIncome:   false,
+  isFirstTime:    false,
+  isNoHouse:      false,
+  yearIncome:     0,   // 만원. 0이면 입력 안 한 것
+  myAsset:        0,   // 만원
+  monthlySaving:  0,   // 만원
+  borrowingYear:  30,
+  paymentType:    'fixed',
+  kidsCount:      0,
+  isHavingKids:   false,
   isSingleParent: false,
-  isMultiCultural: false,
-  isDisabled: false,
+  isMultiCultural:false,
+  isDisabled:     false,
   preferCategory: 'station',
-  preferRegions: [],
+  preferRegions:  [],
 };
 
 type Store = AppState & {
@@ -43,7 +37,7 @@ type Store = AppState & {
 
 export const useAppStore = create<Store>((set) => ({
   ...initialState,
-  set: (key, val) => set({ [key]: val } as any),
-  hydrate: (s) => set(s),
-  reset: () => set(initialState),
+  set:     (key, val) => set({ [key]: val } as Partial<AppState>),
+  hydrate: (s)        => set(s),
+  reset:   ()         => set(initialState),
 }));
