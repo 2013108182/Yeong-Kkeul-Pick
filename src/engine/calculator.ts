@@ -14,7 +14,7 @@ import {
   STRESS_RATE_CAPITAL,
   NORMAL_RATE,
   LTV,
-  CAPITAL_LOAN_CAP,
+  getCapitalLoanCap,
   isAbleDidimdol,
   isAbleNewBornSpecial,
   isAbleBogeumjari,
@@ -118,11 +118,7 @@ const principalFromYearlyPayment = (yearlyWon: number, ratePct: number, years: n
   return monthly / factor / 1e8;
 };
 
-const getLtvForCase = (caseKey: CaseKey, isFirstTime: boolean): number => {
-  if (caseKey === 'NON_REGULATED' && isFirstTime) return LTV.FIRSTTIME_NON_REGULATED;
-  if (isFirstTime) return LTV.FIRSTTIME_REGULATED;
-  return LTV.GENERAL;
-};
+const getLtvForCase = (_caseKey: CaseKey, _isFirstTime: boolean): number => LTV.GENERAL;
 
 const CASE_LABEL: Record<CaseKey, string> = {
   GANGNAM3_YONGSAN: '강남3구·용산',
@@ -138,8 +134,7 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
   const myAssetEok   = myAssetMw / 10000; // 만원 → 억
 
   const internationalAge = getInternationalAge(raw.birthday);
-  const ltv     = getLtvForCase(caseKey, !!raw.isFirstTime);
-  const loanCap = caseKey === 'NON_REGULATED' ? Infinity : CAPITAL_LOAN_CAP;
+  const ltv = getLtvForCase(caseKey, !!raw.isFirstTime);
 
   // 1. LTV 기반 최대 대출
   // 주택가격 × (1 - ltv/100) = 자기자본
@@ -204,7 +199,9 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
   }
   tryAddLoan('일반 주담대', NORMAL_RATE, Infinity);
 
-  // 4. 수도권 6억 캡
+  // 4. 수도권 가격별 캡 (NON_REGULATED는 캡 없음)
+  const tentativePrice = myAssetEok + totalLoan;
+  const loanCap = caseKey === 'NON_REGULATED' ? Infinity : getCapitalLoanCap(tentativePrice);
   if (loanCap !== Infinity && totalLoan > loanCap) {
     let overflow = totalLoan - loanCap;
     pieces.sort((a, b) => b.rate - a.rate);
@@ -250,7 +247,7 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
     warnings.push(`보금자리론은 ${BOGEUMJARI_PRICE_CAP}억 이하 주택만 가능 → 제외됨`);
   }
 
-  if (caseKey !== 'NON_REGULATED') warnings.push(`수도권 규제 → 주담대 ${CAPITAL_LOAN_CAP}억 캡 적용`);
+  if (caseKey !== 'NON_REGULATED') warnings.push(`수도권 규제 → 주담대 ${loanCap}억 캡 적용`);
   if (caseKey === 'GANGNAM3_YONGSAN') warnings.push('자금조달계획서 + 실거주 의무(2년) 필수');
   else if (caseKey === 'OTHER_REGULATED') warnings.push('자금조달계획서 + 실거주 의무 적용 가능');
 
