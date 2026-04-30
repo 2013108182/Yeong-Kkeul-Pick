@@ -23,9 +23,9 @@ export const Landing = () => {
         </h1>
 
         <p className="t-sub" style={{ maxWidth: 540, margin: '0 auto 32px', fontSize: 16, lineHeight: 1.7 }}>
-          강남3구·용산 / 기타 토허제 / 비토허제<br />
-          세 갈래로 나눠서 계산하고,<br />
-          내 우선순위에 맞는 아파트까지 한 번에 골라드립니다.
+          복잡한 토허제와 대출 계산은 영끌픽에 맡기고,<br />
+          당신은 '어디서 살지'만 결정하세요.<br />
+          우선순위 기반 맞춤 단지를 한 번에 매칭해 드립니다.
         </p>
 
         <button className="btn btn-primary" onClick={() => nav('/wizard')} style={{ padding: '16px 36px', fontSize: 16 }}>
