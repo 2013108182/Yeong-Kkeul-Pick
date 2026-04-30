@@ -193,10 +193,12 @@ body::after {
   font-size: 12px; color: var(--text-2);
 }
 .step-dot {
-  display: flex; align-items: center; gap: 8px;
+display: flex; align-items: center; gap: 8px;
   padding: 6px 12px; border-radius: 999px;
   background: var(--glass-bg); border: 1px solid var(--glass-border);
   font-weight: 600;
+  white-space: nowrap; /* 텍스트 줄바꿈 방지 */
+  flex-shrink: 0;      /* 공간이 좁아도 버튼이 찌그러지지 않게 방지 */
 }
 .step-dot.active {
   background: linear-gradient(135deg, var(--accent-violet), var(--accent-cyan));
