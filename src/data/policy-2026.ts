@@ -70,11 +70,12 @@ export const getCapitalLoanCap = (priceEok: number): number => {
 };
 
 // ─── 취득세율 (주택 가격 억 기준, 1주택) ───
-// 6억 이하: 1%, 6~9억: 1~3% 선형, 9억 초과: 3%
+// 6억 이하: 1%, 6~9억: 1~3% 선형, 9억 초과: 3% + 지방교육세 등 부가세 0.3%p
 export const getAcquisitionTaxRate = (priceEok: number): number => {
-  if (priceEok <= 6) return 0.01;
-  if (priceEok <= 9) return 0.01 + (priceEok - 6) / 3 * 0.02;
-  return 0.03;
+  const SURTAX = 0.003; // 지방교육세 등 부가세율
+  if (priceEok <= 6) return 0.01 + SURTAX;
+  if (priceEok <= 9) return 0.01 + (priceEok - 6) / 3 * 0.02 + SURTAX;
+  return 0.03 + SURTAX;
 };
 
 // 취득세 계산 (억 → 만원)
@@ -88,12 +89,14 @@ export const calcAcquisitionTax = (priceEok: number): number => {
 export const calcBrokerageFee = (priceEok: number): number => {
   const priceWon = priceEok * 10000; // 만원
   let rate: number;
-  if (priceWon < 5000)       rate = 0.006;
-  else if (priceWon < 20000) rate = 0.005;
-  else if (priceWon < 90000) rate = 0.004; // 9억 미만
-  else                        rate = 0.009; // 9억 이상 (협의, 상한)
+  if (priceWon < 5000)         rate = 0.006;
+  else if (priceWon < 20000)   rate = 0.005;
+  else if (priceWon < 90000)   rate = 0.004;  // 9억 미만
+  else if (priceWon < 120000)  rate = 0.005;  // 9억~12억
+  else if (priceWon < 150000)  rate = 0.006;  // 12억~15억
+  else                          rate = 0.007;  // 15억 이상
   const fee = priceWon * rate;
-  // 상한 한도
+  // 상한 한도 (9억 미만 구간만 적용)
   const caps: [number, number][] = [
     [5000, 250], [20000, 800], [90000, Infinity],
   ];
@@ -111,7 +114,7 @@ export const isAbleDidimdol = (
   isNewCouple: boolean,
 ) => {
   if (yearIncome <= 6000) return true;
-  if ((isMarried && isHavingKids) || (isMarried && isNewCouple)) return yearIncome <= 7000;
+  if ((isMarried && isHavingKids) || (isMarried && isNewCouple)) return yearIncome <= 8500;
   return false;
 };
 
