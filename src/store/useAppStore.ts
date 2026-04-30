@@ -14,16 +14,16 @@ const todayMinus30 = () => {
 };
 
 export const initialState: AppState = {
-  birthday: todayMinus30(),
-  isMarried: true,
-  isNewCouple: false,
-  hasNewBorn2yr: false,
-  isDualIncome: true,
-  isFirstTime: true,
-  isNoHouse: true,
-  yearIncome: 9000,
-  myAsset: 30000,         // 만원 (3억)
-  monthlySaving: 200,
+  birthday: '',
+  isMarried: null as any,       // 기본 상태를 위해 null 지정
+  isNewCouple: null as any,
+  hasNewBorn2yr: null as any,
+  isDualIncome: null as any,
+  isFirstTime: null as any,
+  isNoHouse: null as any,
+  yearIncome: '' as any,        // 0 대신 비워두어 placeholder가 보이게 함
+  myAsset: '' as any,
+  monthlySaving: '' as any,
   borrowingYear: 30,
   paymentType: 'fixed',
   kidsCount: 0,
