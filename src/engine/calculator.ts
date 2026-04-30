@@ -136,10 +136,14 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
   const internationalAge = getInternationalAge(raw.birthday);
   const ltv = getLtvForCase(caseKey, !!raw.isFirstTime);
 
-  // 1. LTV 기반 최대 대출
-  // 주택가격 × (1 - ltv/100) = 자기자본
-  // → 주택가격 = 자기자본 / (1 - ltv/100)
-  const maxPriceByLtv = myAssetEok / (1 - ltv / 100);
+  // 1. LTV 기반 최대 가격 (취득세+중개수수료 역산, 3회 수렴)
+  //    P × (1 - ltv/100) = myAsset - tax(P) - fee(P) 를 반복 근사
+  let _p = myAssetEok / (1 - ltv / 100);
+  for (let i = 0; i < 3; i++) {
+    const overhead = (calcAcquisitionTax(_p) + calcBrokerageFee(_p)) / 10000; // 억
+    _p = Math.max(myAssetEok - overhead, 0) / (1 - ltv / 100);
+  }
+  const maxPriceByLtv = _p;
   const maxLoanByLtv  = maxPriceByLtv * (ltv / 100);
 
   // 2. 정책대출 자격
@@ -150,20 +154,27 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
   const yearlyDsrWon = dsrAvailableYearly(yearIncomeMw);
 
   // 3. 저금리 → 고금리 순 누적
+  //    정책대출(isPolicy=true): DSR 규정상 면제 → 스트레스 DSR 미적용, DSR 예산 비차감
+  //    일반 주담대(isPolicy=false): 스트레스 DSR(+3%p) 적용, DSR 예산 차감
   const pieces: LoanPiece[] = [];
   let remainYearly  = yearlyDsrWon;
   let remainLtvLoan = maxLoanByLtv;
   let totalLoan     = 0;
 
-  const tryAddLoan = (name: string, rate: number, productLimitEok: number) => {
-    if (remainYearly < 1000 || remainLtvLoan < 0.01) return;
-    // DSR 심사: 스트레스 금리(+1.5%p)로 한도 산정
-    const stressedRate = rate + STRESS_RATE_CAPITAL;
-    const dsrPossible  = principalFromYearlyPayment(remainYearly, stressedRate, raw.borrowingYear);
-    const cap          = Math.min(productLimitEok, remainLtvLoan, dsrPossible);
+  const tryAddLoan = (name: string, rate: number, productLimitEok: number, isPolicy = false) => {
+    if (remainLtvLoan < 0.01) return;
+    let cap: number;
+    if (isPolicy) {
+      cap = Math.min(productLimitEok, remainLtvLoan);
+    } else {
+      if (remainYearly < 1000) return;
+      const dsrRate     = rate + STRESS_RATE_CAPITAL;
+      const dsrPossible = principalFromYearlyPayment(remainYearly, dsrRate, raw.borrowingYear);
+      cap = Math.min(productLimitEok, remainLtvLoan, dsrPossible);
+      if (cap < 0.01) return;
+      remainYearly -= monthlyFixed(cap, dsrRate, raw.borrowingYear) * 12;
+    }
     if (cap < 0.01) return;
-
-    const dsrUsedWon = monthlyFixed(cap, stressedRate, raw.borrowingYear) * 12;
     pieces.push({
       name,
       amount:         parseFloat(cap.toFixed(2)),
@@ -171,13 +182,12 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
       monthlyPayment: monthlyFixed(cap, rate, raw.borrowingYear),
       totalInterest:  totalInterestFixed(cap, rate, raw.borrowingYear),
     });
-    remainYearly  -= dsrUsedWon;
     remainLtvLoan -= cap;
     totalLoan     += cap;
   };
 
   if (ableNewBorn) {
-    tryAddLoan('신생아특례 디딤돌', getNewBornBaseRate(yearIncomeMw), NEW_BORN_LIMIT);
+    tryAddLoan('신생아특례 디딤돌', getNewBornBaseRate(yearIncomeMw), NEW_BORN_LIMIT, true);
   }
   if (ableDidimdol && !pieces.some(p => p.name.includes('신생아'))) {
     const base  = getDidimdolBaseRate(yearIncomeMw, raw.borrowingYear);
@@ -191,11 +201,11 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
     tryAddLoan('디딤돌', Math.max(base - prime, DIDIMDOL_RATE_FLOOR), getDidimdolLimit({
       isMarried: !!raw.isMarried, isHavingKids: !!raw.isHavingKids,
       kidsCount: raw.kidsCount || 0, isNewCouple: !!raw.isNewCouple, internationalAge,
-    }));
+    }), true);
   }
   if (ableBogeumjari) {
     tryAddLoan('보금자리론', BOGEUMJARI_RATE[raw.borrowingYear],
-      getBogeumjariLimit(!!raw.isFirstTime, raw.kidsCount || 0));
+      getBogeumjariLimit(!!raw.isFirstTime, raw.kidsCount || 0), true);
   }
   tryAddLoan('일반 주담대', NORMAL_RATE, Infinity);
 
@@ -217,29 +227,67 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
     totalLoan = pieces.reduce((s, p) => s + p.amount, 0);
   }
 
-  // 5. 정책대출 주택가격 상한
+  // 5. 일반 주담대 단독 시나리오 (정책대출 가격 상한 비교용)
+  const generalStressRate = NORMAL_RATE + STRESS_RATE_CAPITAL;
+  const generalMaxByDsr   = principalFromYearlyPayment(yearlyDsrWon, generalStressRate, raw.borrowingYear);
+  let generalLoanOnly     = Math.min(generalMaxByDsr, maxLoanByLtv);
+  if (caseKey !== 'NON_REGULATED') {
+    generalLoanOnly = Math.min(generalLoanOnly, getCapitalLoanCap(myAssetEok + generalLoanOnly));
+  }
+  const generalScenarioPrice = myAssetEok + generalLoanOnly;
+
+  // 6. 정책대출 주택가격 상한 (스마트 분기)
+  //    정책대출 상한 < 일반 주담대 단독 가격이면 → 일반 주담대 단독이 더 유리
   let maxPropertyPrice = myAssetEok + totalLoan;
   const warnings: string[] = [];
 
   const usingNewBorn    = pieces.some(p => p.name.includes('신생아'));
   const usingDidimdol   = pieces.some(p => p.name === '디딤돌');
   const usingBogeumjari = pieces.some(p => p.name === '보금자리론');
+  let usedGeneralOnly   = false;
+
+  const switchToGeneralOnly = () => {
+    totalLoan = parseFloat(generalLoanOnly.toFixed(2));
+    pieces.length = 0;
+    if (generalLoanOnly > 0.01) {
+      pieces.push({
+        name:           '일반 주담대',
+        amount:         totalLoan,
+        rate:           parseFloat(NORMAL_RATE.toFixed(2)),
+        monthlyPayment: monthlyFixed(generalLoanOnly, NORMAL_RATE, raw.borrowingYear),
+        totalInterest:  totalInterestFixed(generalLoanOnly, NORMAL_RATE, raw.borrowingYear),
+      });
+    }
+    maxPropertyPrice = generalScenarioPrice;
+  };
 
   if (usingNewBorn && maxPropertyPrice > NEW_BORN_PRICE_CAP) {
-    maxPropertyPrice = NEW_BORN_PRICE_CAP;
-    warnings.push(`신생아특례 → 주택가격 ${NEW_BORN_PRICE_CAP}억 이하 제한`);
+    if (generalScenarioPrice > NEW_BORN_PRICE_CAP) {
+      switchToGeneralOnly();
+      usedGeneralOnly = true;
+      warnings.push(`신생아특례 가격 상한(${NEW_BORN_PRICE_CAP}억) 초과 → 일반 주담대가 더 유리`);
+    } else {
+      maxPropertyPrice = NEW_BORN_PRICE_CAP;
+      warnings.push(`신생아특례 → 주택가격 ${NEW_BORN_PRICE_CAP}억 이하 제한`);
+    }
   }
-  if (usingDidimdol) {
+  if (!usedGeneralOnly && usingDidimdol) {
     const cap = getDidimdolPriceCap({
       isMarried: !!raw.isMarried, isHavingKids: !!raw.isHavingKids,
       kidsCount: raw.kidsCount || 0, isNewCouple: !!raw.isNewCouple, internationalAge,
     });
     if (maxPropertyPrice > cap) {
-      maxPropertyPrice = cap;
-      warnings.push(`디딤돌 → 주택가격 ${cap}억 이하 제한`);
+      if (generalScenarioPrice > cap) {
+        switchToGeneralOnly();
+        usedGeneralOnly = true;
+        warnings.push(`디딤돌 가격 상한(${cap}억) 초과 → 일반 주담대가 더 유리`);
+      } else {
+        maxPropertyPrice = cap;
+        warnings.push(`디딤돌 → 주택가격 ${cap}억 이하 제한`);
+      }
     }
   }
-  if (usingBogeumjari && maxPropertyPrice > BOGEUMJARI_PRICE_CAP) {
+  if (!usedGeneralOnly && usingBogeumjari && maxPropertyPrice > BOGEUMJARI_PRICE_CAP) {
     const idx = pieces.findIndex(p => p.name === '보금자리론');
     if (idx >= 0) pieces.splice(idx, 1);
     totalLoan        = pieces.reduce((s, p) => s + p.amount, 0);
@@ -251,7 +299,7 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
   if (caseKey === 'GANGNAM3_YONGSAN') warnings.push('자금조달계획서 + 실거주 의무(2년) 필수');
   else if (caseKey === 'OTHER_REGULATED') warnings.push('자금조달계획서 + 실거주 의무 적용 가능');
 
-  // 6. 스트레스 DSR 임팩트
+  // 7. 스트레스 DSR 임팩트
   const avgRate = totalLoan > 0
     ? pieces.reduce((s, p) => s + p.rate * p.amount, 0) / totalLoan
     : NORMAL_RATE;
@@ -259,7 +307,7 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
   const stressed   = principalFromYearlyPayment(yearlyDsrWon, avgRate + STRESS_RATE_CAPITAL, raw.borrowingYear);
   const stressDsrImpact = parseFloat(Math.max(0, unstressed - stressed).toFixed(2));
 
-  // 7. 취득세 + 중개수수료
+  // 8. 취득세 + 중개수수료
   const acquisitionTax = calcAcquisitionTax(maxPropertyPrice); // 만원
   const brokerageFee   = calcBrokerageFee(maxPropertyPrice);   // 만원
   const propertyMw     = Math.round(maxPropertyPrice * 10000);
@@ -270,7 +318,10 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
     acquisitionTax,
     brokerageFee,
     totalCost:    propertyMw + acquisitionTax + brokerageFee,
-    requiredCash: Math.max(0, propertyMw - loanMw + acquisitionTax + brokerageFee),
+    requiredCash: Math.min(
+      Math.max(0, propertyMw - loanMw + acquisitionTax + brokerageFee),
+      myAssetMw,
+    ),
   };
 
   return {
