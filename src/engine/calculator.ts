@@ -137,7 +137,6 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
   const ltv = getLtvForCase(caseKey, !!raw.isFirstTime);
 
   // 1. LTV 기반 최대 가격 (취득세+중개수수료 역산, 3회 수렴)
-  //    P × (1 - ltv/100) = myAsset - tax(P) - fee(P) 를 반복 근사
   let _p = myAssetEok / (1 - ltv / 100);
   for (let i = 0; i < 3; i++) {
     const overhead = (calcAcquisitionTax(_p) + calcBrokerageFee(_p)) / 10000; // 억
@@ -153,9 +152,7 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
 
   const yearlyDsrWon = dsrAvailableYearly(yearIncomeMw);
 
-  // 3. 저금리 → 고금리 순 누적
-  //    정책대출(isPolicy=true): DSR 규정상 면제 → 스트레스 DSR 미적용, DSR 예산 비차감
-  //    일반 주담대(isPolicy=false): 스트레스 DSR(+3%p) 적용, DSR 예산 차감
+  // 3. 주담대 슬롯 할당 (상호 배타적: Mutually Exclusive 적용)
   const pieces: LoanPiece[] = [];
   let remainYearly  = yearlyDsrWon;
   let remainLtvLoan = maxLoanByLtv;
@@ -186,10 +183,14 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
     totalLoan     += cap;
   };
 
+  let hasPrimaryMortgage = false; // 주담대 중첩 방지용 플래그
+
   if (ableNewBorn) {
     tryAddLoan('신생아특례 디딤돌', getNewBornBaseRate(yearIncomeMw), NEW_BORN_LIMIT, true);
+    if (pieces.length > 0) hasPrimaryMortgage = true;
   }
-  if (ableDidimdol && !pieces.some(p => p.name.includes('신생아'))) {
+  
+  if (!hasPrimaryMortgage && ableDidimdol) {
     const base  = getDidimdolBaseRate(yearIncomeMw, raw.borrowingYear);
     const prime = getDidimdolPrimeRate({
       isMarried: !!raw.isMarried, isHavingKids: !!raw.isHavingKids,
@@ -202,12 +203,18 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
       isMarried: !!raw.isMarried, isHavingKids: !!raw.isHavingKids,
       kidsCount: raw.kidsCount || 0, isNewCouple: !!raw.isNewCouple, internationalAge,
     }), true);
+    if (pieces.length > 0) hasPrimaryMortgage = true;
   }
-  if (ableBogeumjari) {
-    tryAddLoan('보금자리론', BOGEUMJARI_RATE[raw.borrowingYear],
-      getBogeumjariLimit(!!raw.isFirstTime, raw.kidsCount || 0), true);
+  
+  if (!hasPrimaryMortgage && ableBogeumjari) {
+    tryAddLoan('보금자리론', BOGEUMJARI_RATE[raw.borrowingYear], getBogeumjariLimit(!!raw.isFirstTime, raw.kidsCount || 0), true);
+    if (pieces.length > 0) hasPrimaryMortgage = true;
   }
-  tryAddLoan('일반 주담대', NORMAL_RATE, Infinity);
+
+  // 정책대출 버프가 없는 경우에만 일반 주담대 적용
+  if (!hasPrimaryMortgage) {
+    tryAddLoan('일반 주담대', NORMAL_RATE, Infinity);
+  }
 
   // 4. 수도권 가격별 캡 (NON_REGULATED는 캡 없음)
   const tentativePrice = myAssetEok + totalLoan;
@@ -237,7 +244,6 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
   const generalScenarioPrice = myAssetEok + generalLoanOnly;
 
   // 6. 정책대출 주택가격 상한 (스마트 분기)
-  //    정책대출 상한 < 일반 주담대 단독 가격이면 → 일반 주담대 단독이 더 유리
   let maxPropertyPrice = myAssetEok + totalLoan;
   const warnings: string[] = [];
 
@@ -317,7 +323,7 @@ export const calcCase = (raw: Inputs, caseKey: CaseKey): CaseResult => {
     propertyPrice:  parseFloat(maxPropertyPrice.toFixed(2)),
     acquisitionTax,
     brokerageFee,
-    totalCost:    propertyMw + acquisitionTax + brokerageFee,
+    totalCost:      propertyMw + acquisitionTax + brokerageFee,
     requiredCash: Math.min(
       Math.max(0, propertyMw - loanMw + acquisitionTax + brokerageFee),
       myAssetMw,
