@@ -18,8 +18,8 @@ export const Landing = () => {
         </div>
 
         <h1 className="h-display" style={{ marginBottom: 16 }}>
-          내 연봉으로 살 수 있는 집,<br />
-          <span className="gradient-text">토허제까지 다 따져드려요</span>
+          영끌에도 전략이 필요하니까,<br />
+          <span className="gradient-text">내 자금력에 딱 붙는 아파트 큐레이션, 영끌픽</span>
         </h1>
 
         <p className="t-sub" style={{ maxWidth: 540, margin: '0 auto 32px', fontSize: 16, lineHeight: 1.7 }}>
