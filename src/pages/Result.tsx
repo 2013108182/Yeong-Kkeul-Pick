@@ -3,10 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toPng } from 'html-to-image';
 import { useAppStore } from '../store/useAppStore';
-import { calcAllCases, type CaseKey, type CaseResult } from '../engine/calculator';
+import { calcAllCases, type CaseKey, type CaseResult, type EntryCost } from '../engine/calculator';
 import { CATEGORIES, curateApartments, type Apartment } from '../data/apartments';
-import { REGION_BY_CODE, REGIONS_BY_LEVEL } from '../data/regulated-zones';
-import { formatEok, formatWon, comma } from '../utils/format';
+import { REGION_BY_CODE } from '../data/regulated-zones';
+import { comma } from '../utils/format';
 import { buildShareUrl, copyToClipboard, decodeShareState } from '../utils/shareUrl';
 
 const CASE_ORDER: CaseKey[] = ['GANGNAM3_YONGSAN', 'OTHER_REGULATED', 'NON_REGULATED'];
@@ -16,6 +16,10 @@ const CASE_STYLE: Record<CaseKey, { cls: string; tagline: string }> = {
   NON_REGULATED:    { cls: 'normal',    tagline: '캡 없음 · 생애최초면 LTV 80%' },
 };
 
+// 국토부 실거래가 공개시스템 단지 검색 URL
+const naverAptUrl = (name: string) =>
+  `https://m.land.naver.com/search/result/${encodeURIComponent(name)}`;
+
 export const Result = () => {
   const nav = useNavigate();
   const s = useAppStore();
@@ -23,7 +27,6 @@ export const Result = () => {
   const captureRef = useRef<HTMLDivElement>(null);
   const [shareCopied, setShareCopied] = useState(false);
 
-  // URL 공유 진입 시 hydrate
   useEffect(() => {
     const r = params.get('r');
     if (r) {
@@ -34,17 +37,15 @@ export const Result = () => {
 
   const cases = useMemo(() => calcAllCases(s), [s]);
 
-  // 큐레이션은 비토허제 케이스 기준 budget으로 매칭 (가장 여유 있음)
   const budget = cases.NON_REGULATED.maxPropertyPrice;
   const apartments = useMemo(
     () => curateApartments({ budget, category: s.preferCategory, regionCodes: s.preferRegions }),
-    [budget, s.preferCategory, s.preferRegions]
+    [budget, s.preferCategory, s.preferRegions],
   );
 
   const onCopyLink = async () => {
     const url = buildShareUrl(s);
-    const ok = await copyToClipboard(url);
-    if (ok) {
+    if (await copyToClipboard(url)) {
       setShareCopied(true);
       setTimeout(() => setShareCopied(false), 1800);
     }
@@ -54,14 +55,11 @@ export const Result = () => {
     if (!captureRef.current) return;
     try {
       const dataUrl = await toPng(captureRef.current, {
-        cacheBust: true,
-        backgroundColor: '#1a1735',
-        pixelRatio: 2,
+        cacheBust: true, backgroundColor: '#1a1735', pixelRatio: 2,
       });
       const a = document.createElement('a');
       a.download = `yeong-kkeul-pick-${Date.now()}.png`;
-      a.href = dataUrl;
-      a.click();
+      a.href = dataUrl; a.click();
     } catch (e) { console.error(e); }
   };
 
@@ -90,14 +88,17 @@ export const Result = () => {
             영끌 시뮬레이션 결과
           </div>
           <div className="h-display" style={{ marginBottom: 12 }}>
-            연봉 <span className="gradient-text">{(s.yearIncome / 10000).toFixed(1)}억</span> + 자산 <span className="gradient-text">{(s.myAsset / 10000).toFixed(1)}억</span>으로
+            연봉 <span className="gradient-text">{(s.yearIncome / 10000).toFixed(1)}억</span>
+            {' '}+ 자산 <span className="gradient-text">{(s.myAsset / 10000).toFixed(1)}억</span>으로
           </div>
           <div className="h-1" style={{ marginBottom: 4 }}>
-            최대 <span className="t-num gradient-text" style={{ fontSize: '1.4em' }}>
+            최대{' '}
+            <span className="t-num gradient-text" style={{ fontSize: '1.4em' }}>
               {cases.NON_REGULATED.maxPropertyPrice.toFixed(1)}억
-            </span> 까지 가능
+            </span>
+            {' '}까지 가능
           </div>
-          <div className="t-sub">비토허제 기준. 토허제·강남3구는 더 빡빡합니다 ↓</div>
+          <div className="t-sub">비토허제 기준. 토허제·강남3구는 아래에서 확인하세요 ↓</div>
         </motion.div>
 
         {/* ─── 3 케이스 비교 ─── */}
@@ -126,11 +127,13 @@ export const Result = () => {
           {apartments.length === 0 ? (
             <div className="glass-tile" style={{ textAlign: 'center', padding: 32 }}>
               <div className="h-3" style={{ marginBottom: 8 }}>예산에 맞는 단지가 없어요 😢</div>
-              <div className="t-sub">희망 지역을 넓혀보거나 다른 카테고리를 골라보세요</div>
+              <div className="t-sub">희망 지역을 넓히거나 다른 카테고리를 선택해보세요</div>
             </div>
           ) : (
             <div className="grid-3">
-              {apartments.map((apt, i) => <ApartmentCard key={apt.id} apt={apt} delay={i * 0.04} />)}
+              {apartments.map((apt, i) => (
+                <ApartmentCard key={apt.id} apt={apt} delay={i * 0.04} />
+              ))}
             </div>
           )}
         </motion.div>
@@ -152,13 +155,13 @@ export const Result = () => {
             <Insight
               label="강남3구·용산 vs 비토허제 차이"
               value={`${(cases.NON_REGULATED.maxPropertyPrice - cases.GANGNAM3_YONGSAN.maxPropertyPrice).toFixed(2)}억`}
-              hint="6억 캡 + 자금조달 의무 등 규제로 인한 격차"
+              hint="6억 캡 + 규제로 인한 격차"
             />
             {cases.NON_REGULATED.loanPieces.some(p => p.name.includes('신생아')) && (
               <Insight
                 label="신생아특례 적용"
                 value="✓"
-                hint="2년내 출산 + 부부 1.3억(맞벌이 2억) 이하 → 5년간 1.8~3.3% 금리"
+                hint="5년간 1.8~3.3% 저금리 적용"
                 emerald
               />
             )}
@@ -174,8 +177,12 @@ export const Result = () => {
 };
 
 // ─── Case Card ───
-const CaseCard = ({ caseKey, result, delay }: { caseKey: CaseKey; result: CaseResult; delay: number }) => {
+const CaseCard = ({ caseKey, result, delay }: {
+  caseKey: CaseKey; result: CaseResult; delay: number;
+}) => {
   const style = CASE_STYLE[caseKey];
+  const ec    = result.entryCost;
+
   return (
     <motion.div
       className={`case-card ${style.cls}`}
@@ -197,6 +204,30 @@ const CaseCard = ({ caseKey, result, delay }: { caseKey: CaseKey; result: CaseRe
         {result.loanCap !== Infinity && <div className="t-mute">⚠ 주담대 {result.loanCap}억 캡</div>}
       </div>
 
+      {/* ─── 취득세 + 중개수수료 ─── */}
+      <div className="entry-cost-box">
+        <div className="entry-cost-title">💰 실제 진입 비용</div>
+        <div className="entry-cost-row">
+          <span>취득세</span>
+          <span>{comma(ec.acquisitionTax)}만</span>
+        </div>
+        <div className="entry-cost-row">
+          <span>중개수수료</span>
+          <span>{comma(ec.brokerageFee)}만</span>
+        </div>
+        <div className="entry-cost-row total">
+          <span>실 현금 필요액</span>
+          <span className="t-num" style={{ color: 'var(--accent-cyan)' }}>
+            {ec.requiredCash >= 10000
+              ? `${(ec.requiredCash / 10000).toFixed(1)}억`
+              : `${comma(ec.requiredCash)}만`}
+          </span>
+        </div>
+        <div className="t-mute" style={{ fontSize: 10, marginTop: 4 }}>
+          ※ 자기자본 - 대출 + 취득세 + 중개수수료
+        </div>
+      </div>
+
       <div className="t-mute" style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 10, marginTop: 'auto' }}>
         {style.tagline}
       </div>
@@ -209,7 +240,7 @@ const CaseCard = ({ caseKey, result, delay }: { caseKey: CaseKey; result: CaseRe
               <div key={i} className="loan-piece">
                 <div>
                   <div className="name">{p.name}</div>
-                  <div className="meta">{p.rate}% · {(p.monthlyPayment/10000).toFixed(0)}만/월</div>
+                  <div className="meta">{p.rate}% · {(p.monthlyPayment / 10000).toFixed(0)}만/월</div>
                 </div>
                 <div className="amount">{p.amount.toFixed(1)}억</div>
               </div>
@@ -233,9 +264,12 @@ const CaseCard = ({ caseKey, result, delay }: { caseKey: CaseKey; result: CaseRe
 const ApartmentCard = ({ apt, delay }: { apt: Apartment; delay: number }) => {
   const region = REGION_BY_CODE[apt.regionCode];
   const regulationBadge =
-    region?.regulation === 'GANGNAM3_YONGSAN' ? { label: '강남3구·용산', color: 'var(--accent-pink)' } :
-    region?.regulation === 'OTHER_REGULATED'  ? { label: '토허제', color: 'var(--accent-amber)' } :
+    region?.regulation === 'GANGNAM3_YONGSAN' ? { label: '강남3구·용산', color: 'var(--accent-pink)' }   :
+    region?.regulation === 'OTHER_REGULATED'  ? { label: '토허제',       color: 'var(--accent-amber)' }  :
     { label: '비토허제', color: 'var(--accent-emerald)' };
+
+  // 네이버 부동산 실거래가 링크
+  const priceUrl = naverAptUrl(apt.name);
 
   return (
     <motion.div
@@ -249,13 +283,16 @@ const ApartmentCard = ({ apt, delay }: { apt: Apartment; delay: number }) => {
           background: 'rgba(255,255,255,0.08)', color: regulationBadge.color, letterSpacing: 0.5,
         }}>{regulationBadge.label}</span>
       </div>
+
       <div className="district">{apt.district}{apt.metro && ` · ${apt.metro}`}</div>
       <div className="one-liner">{apt.oneLiner}</div>
+
       <div className="price-row">
         {apt.sizes.map((sz, i) => (
           <span key={i} className="price-chip">{sz.area}평 · {sz.price}억</span>
         ))}
       </div>
+
       <div className="row between" style={{ marginTop: 4 }}>
         <span className="t-mute">{apt.buildYear}년 · {comma(apt.totalUnits)}세대</span>
         <div className="tag-row">
@@ -266,6 +303,16 @@ const ApartmentCard = ({ apt, delay }: { apt: Apartment; delay: number }) => {
           ))}
         </div>
       </div>
+
+      {/* ─── 실거래가 링크 ─── */}
+      <a
+        href={priceUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="price-link"
+      >
+        📊 실거래가 보기 →
+      </a>
     </motion.div>
   );
 };
@@ -281,7 +328,7 @@ const Insight = ({ label, value, hint, warn, emerald }: {
     </div>
     <div className="t-num" style={{
       fontSize: 18,
-      color: warn ? 'var(--danger)' : emerald ? 'var(--accent-emerald)' : 'var(--accent-cyan)'
+      color: warn ? 'var(--danger)' : emerald ? 'var(--accent-emerald)' : 'var(--accent-cyan)',
     }}>
       {value}
     </div>
