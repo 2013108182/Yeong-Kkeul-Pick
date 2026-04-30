@@ -13,7 +13,7 @@ const CASE_ORDER: CaseKey[] = ['GANGNAM3_YONGSAN', 'OTHER_REGULATED', 'NON_REGUL
 const CASE_STYLE: Record<CaseKey, { cls: string; tagline: string }> = {
   GANGNAM3_YONGSAN: { cls: 'gangnam',   tagline: '최고 강도 규제 · 자금조달계획서 + 실거주 의무' },
   OTHER_REGULATED:  { cls: 'regulated', tagline: '토허제 + 수도권 6억 캡' },
-  NON_REGULATED:    { cls: 'normal',    tagline: '캡 없음 · 생애최초면 LTV 80%' },
+  NON_REGULATED:    { cls: 'normal',    tagline: '캡 없음 · 최대 LTV 70%' },
 };
 
 // 국토부 실거래가 공개시스템 단지 검색 URL
